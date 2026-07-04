@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My Ideas</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --border: #e2e2e6;
+    --text: #1f1f23;
+    --muted: #74747c;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 32px 16px;
+  }
+  .wrap {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 24px;
+    margin: 0 0 4px;
+  }
+  p.sub {
+    color: var(--muted);
+    margin: 0 0 24px;
+    font-size: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--muted);
+  }
+  input[type=text], textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    margin-bottom: 14px;
+    resize: vertical;
+  }
+  textarea { min-height: 70px; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-hover); }
+  button.secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  button.secondary:hover { background: #f0f0f2; color: var(--text); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(odd) {
+    background: #fafafc;
+  }
+  tbody tr:hover {
+    background: #f0f0f7;
+  }
+  th {
+    background: #ececf3;
+    color: var(--text);
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  td.date { white-space: nowrap; color: var(--muted); font-size: 13px; }
+  td.actions { white-space: nowrap; }
+  td.actions button { padding: 4px 10px; font-size: 12px; margin-right: 6px; }
+  td input[type=text], td textarea {
+    margin-bottom: 0;
+    font-size: 13px;
+    padding: 6px 8px;
+  }
+  td textarea { min-height: 44px; }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 0;
+  }
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .toolbar .count { font-size: 13px; color: var(--muted); }
+  .toolbar .buttons button { margin-left: 8px; }
+  .warning {
+    display: none;
+    background: #fff7e6;
+    border: 1px solid #f2c94c;
+    color: #7a5c00;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>My Ideas</h1>
+  <p class="sub">Jot down an idea whenever it strikes. Everything is saved in your browser automatically.</p>
+  <div class="warning" id="storageWarning">Your browser is blocking saved storage for this page (common when opening the file directly instead of through a server), so ideas will only stay in this table until you close or reload the page. Use Export regularly to keep a backup, or open this file through a local server instead.</div>
+
+  <div class="card">
+    <label for="title">Idea</label>
+    <input type="text" id="title" placeholder="A short name for the idea">
+    <label for="desc">Explanation</label>
+    <textarea id="desc" placeholder="A little explanation of what it is"></textarea>
+    <button id="addBtn">Add Idea</button>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <span class="count" id="count"></span>
+      <span class="buttons">
+        <button class="secondary" id="exportBtn">Export</button>
+        <button class="secondary" id="importBtn">Import</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+      </span>
+    </div>
+    <table id="table">
+      <thead>
+        <tr><th style="width:120px">Date</th><th>Idea</th><th>Explanation</th><th style="width:110px"></th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="emptyMsg" style="display:none">No ideas yet — add your first one above.</div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'my-ideas';
+
+function loadIdeas() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+// Storage is best-effort: some browsers block localStorage for files opened
+// directly via file://. Persisting must never block updating the on-screen table.
+function saveIdeas(ideas) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(ideas));
+    document.getElementById('storageWarning').style.display = 'none';
+  } catch {
+    document.getElementById('storageWarning').style.display = 'block';
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+let ideas = loadIdeas();
+let editingId = null;
+
+function render() {
+  const rows = document.getElementById('rows');
+  const emptyMsg = document.getElementById('emptyMsg');
+  const count = document.getElementById('count');
+
+  count.textContent = ideas.length + (ideas.length === 1 ? ' idea' : ' ideas');
+  rows.innerHTML = '';
+
+  if (ideas.length === 0) {
+    emptyMsg.style.display = 'block';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  ideas.slice().reverse().forEach((idea) => {
+    const tr = document.createElement('tr');
+    if (idea.id === editingId) {
+      tr.innerHTML = `
+        <td class="date">${idea.date}</td>
+        <td><input type="text" class="edit-title" value="${escapeHtml(idea.title)}"></td>
+        <td><textarea class="edit-desc">${escapeHtml(idea.desc)}</textarea></td>
+        <td class="actions">
+          <button data-action="save" data-id="${idea.id}">Save</button>
+          <button class="secondary" data-action="cancel" data-id="${idea.id}">Cancel</button>
+        </td>
+      `;
+    } else {
+      tr.innerHTML = `
+        <td class="date">${idea.date}</td>
+        <td>${escapeHtml(idea.title)}</td>
+        <td>${escapeHtml(idea.desc)}</td>
+        <td class="actions">
+          <button class="secondary" data-action="edit" data-id="${idea.id}">Edit</button>
+          <button class="secondary" data-action="delete" data-id="${idea.id}">Delete</button>
+        </td>
+      `;
+    }
+    rows.appendChild(tr);
+  });
+}
+
+function addIdea() {
+  const titleEl = document.getElementById('title');
+  const descEl = document.getElementById('desc');
+  const title = titleEl.value.trim();
+  const desc = descEl.value.trim();
+
+  if (!title) {
+    titleEl.focus();
+    return;
+  }
+
+  ideas.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    title,
+    desc,
+    date: new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  });
+  render();
+  saveIdeas(ideas);
+
+  titleEl.value = '';
+  descEl.value = '';
+  titleEl.focus();
+}
+
+function deleteIdea(id) {
+  ideas = ideas.filter(i => i.id !== id);
+  render();
+  saveIdeas(ideas);
+}
+
+function saveEdit(id, tr) {
+  const title = tr.querySelector('.edit-title').value.trim();
+  const desc = tr.querySelector('.edit-desc').value.trim();
+  if (!title) return;
+  const idea = ideas.find(i => i.id === id);
+  idea.title = title;
+  idea.desc = desc;
+  editingId = null;
+  render();
+  saveIdeas(ideas);
+}
+
+document.getElementById('addBtn').addEventListener('click', addIdea);
+document.getElementById('desc').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.ctrlKey) addIdea();
+});
+document.getElementById('title').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('desc').focus(); }
+});
+
+document.getElementById('rows').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (btn.dataset.action === 'delete') deleteIdea(id);
+  if (btn.dataset.action === 'edit') { editingId = id; render(); }
+  if (btn.dataset.action === 'cancel') { editingId = null; render(); }
+  if (btn.dataset.action === 'save') saveEdit(id, btn.closest('tr'));
+});
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(ideas, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'my-ideas-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error('bad format');
+      const existingIds = new Set(ideas.map(i => i.id));
+      ideas = ideas.concat(imported.filter(i => !existingIds.has(i.id)));
+      render();
+      saveIdeas(ideas);
+    } catch {
+      alert('Could not import that file.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+render();
+</script>
+</body>
+</html>
