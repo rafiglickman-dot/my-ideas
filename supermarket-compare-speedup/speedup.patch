@@ -1,0 +1,60 @@
+diff --git a/scripts/geo.py b/scripts/geo.py
+index a8e85fb..91ef5ce 100644
+--- a/scripts/geo.py
++++ b/scripts/geo.py
+@@ -171,12 +171,16 @@ def brand_pois(center, radius_km: float, aliases: dict) -> dict:
+     """Supermarkets actually mapped around a point, by chain. If the map is unavailable, returns {}."""
+     la, lo = center
+     f = _cache(f"pois_{round(la, 3)}_{round(lo, 3)}_{round(radius_km, 1)}.json")
++    failed = f.with_name(f.stem + "_failed_" + time.strftime("%Y%m%d"))
+     if f.exists():
+         els = json.loads(f.read_text(encoding="utf-8"))
++    elif failed.exists():  # the map already failed today: don't wait for it again
++        return {}
+     else:
+         try:
+             els = _overpass(f'[out:json][timeout:30];nwr["shop"="supermarket"](around:{int(radius_km * 1000)},{la},{lo});out center tags;', timeout=35)
+         except RuntimeError:
++            failed.touch()
+             return {}
+         f.write_text(json.dumps(els, ensure_ascii=False), encoding="utf-8")
+     out = {c: [] for c in aliases}
+diff --git a/scripts/price_check.py b/scripts/price_check.py
+index 7b04656..ef40ee5 100644
+--- a/scripts/price_check.py
++++ b/scripts/price_check.py
+@@ -21,6 +21,7 @@ import argparse
+ import json
+ import re
+ import sys
++import time
+ from datetime import date
+ from pathlib import Path
+ 
+@@ -32,6 +33,7 @@ import geo  # noqa: E402
+ DISCLAIMER = ("חשוב לדעת: המערכת עלולה לטעות ולא תמיד מדייקת ב-100%. היא נשענת על קובצי המחירים שהרשתות מפרסמות "
+               "ועל התאמת שם המוצר בידי AI, ומחירים, מבצעים, מלאי וכתובות יכולים להשתנות. זו הערכה ולא הבטחה לסכום "
+               "בקופה, אז לפני נסיעה מיוחדת כדאי לוודא מול הסניף.")
++DOWN_SECONDS = 30 * 60  # retry a portal that did not answer only after this long
+ LOC_HE = {"verified": "מאומת במפה", "address": "לפי כתובת בלבד", "street": "לפי רחוב בלבד", "manual": "ידני"}
+ 
+ 
+@@ -56,11 +58,18 @@ def branches(a) -> tuple[list[dict], list[str], list[dict]]:
+     chain_list, down = [], []
+     say("מאתר את הסניפים באזור...")
+     for c in a.chains.split(","):  # one portal that doesn't answer must not stop the others
++        mark = chains.CACHE / f"down_{c}"  # a portal that just failed is not waited for again for a while
++        if mark.exists() and time.time() - mark.stat().st_mtime < DOWN_SECONDS:
++            down.append(chains.CHAINS[c]["he"])
++            continue
+         try:
+             chains.stores(c)
+             chain_list.append(c)
++            mark.unlink(missing_ok=True)
+         except Exception:
+             down.append(chains.CHAINS[c]["he"])
++            chains.CACHE.mkdir(parents=True, exist_ok=True)
++            mark.touch()
+     if down:
+         say(f'הפורטל לא ענה, הרשת לא נבדקה: {", ".join(down)}')
+     a.down = down
